@@ -21,7 +21,7 @@ This is a React Native project built using [React Native](https://reactnative.de
 
 - Node.js (v14 or above)
 - Yarn or npm
-- React Native CLI
+- React Native CLI v0.69.0
 
 ### Installation
 
