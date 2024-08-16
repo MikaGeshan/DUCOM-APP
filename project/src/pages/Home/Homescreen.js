@@ -1,149 +1,260 @@
-import { StyleSheet, ScrollView, View, Text, TouchableOpacity, BackHandler, Alert, SafeAreaView } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, {useState, useEffect, useCallback} from 'react';
+import {
+  StyleSheet,
+  ScrollView,
+  View,
+  Alert,
+  SafeAreaView,
+  BackHandler,
+  TouchableOpacity,
+  Text,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
-import config from '../../config';
+import {useFocusEffect} from '@react-navigation/native';
 import TweetCard from '../../components/TweetCard'; // Import TweetCard
+import Animated, {
+  withDelay,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import * as ImagePicker from 'react-native-image-picker';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import axios from 'axios';
+import config from '../../config';
 
 const serverUrl = config.SERVER_URL;
 
-const HomeScreen = ({ navigation }) => {
-  const [userData, setUserData] = useState("");
-  const [tweets, setTweets] = useState([]); // Add state for tweets
+const HomeScreen = ({navigation}) => {
+  const [tweets, setTweets] = useState([
+    {
+      id: '1',
+      userAvatar:
+        'https://i.pinimg.com/736x/75/5b/f4/755bf4ca4d44e85b43c7c569a8949cfb.jpg',
+      userName: 'peduliamatgua',
+      userHandle: 'frontendkedua',
+      content: 'This is an example tweet. React Native is awesome!',
+      likesCount: 15,
+      commentsCount: 3,
+      bookMarksCount: 5,
+    },
+    {
+      id: '2',
+      userAvatar:
+        'https://i.pinimg.com/474x/21/dc/e9/21dce97c3191b81ed92b56a9492ceac7.jpg',
+      userName: 'frontendgariskeras',
+      userHandle: 'frontend',
+      content: 'nyoride',
+      image:
+        'https://i.pinimg.com/474x/97/02/f6/9702f6e58679186bd95c4eb454899032.jpg', // Example image URL
+      likesCount: 30,
+      commentsCount: 10,
+      bookMarksCount: 8,
+    },
+    {
+      id: '3',
+      userAvatar: 'https://randomuser.me/api/portraits/men/3.jpg',
+      userName: 'Mike Johnson',
+      userHandle: 'mikejohnson',
+      content:
+        'Check out my latest blog post on web development trends in 2024!',
+      video:
+        'file:///C:/Users/ACER/Videos/Ready%20Or%20Not/Ready%20Or%20Not%202024.07.05%20-%2019.29.21.01.mp4', // Example video URL
+      likesCount: 50,
+      commentsCount: 20,
+      bookMarksCount: 10,
+    },
+  ]);
+
+  const isExpanded = useSharedValue(false);
 
   async function getData() {
-    const token = await AsyncStorage.getItem("token");
-    axios
-      .post(`${serverUrl}/userdata`, { token: token })
-      .then(res => {
-        setUserData(res.data.data);
-        if (res.data.status === "error") {
-          Alert.alert('Error', "Anda Telah Keluar dari Akun", [
-            { text: 'OK', onPress: () => navigation.navigate('Signin') }
-          ]);
-        }
-      });
-
-    // Fetch tweets
-    // Replace with your actual data fetching logic
-    setTweets([
-      {
-        userName: 'nimyonim',
-        userHandle: 'nesir',
-        userAvatar: '',
-        content: 'banyak bertanya makin tersesat',
-        image: '',
-        video: 'https://rr5---sn-aigl6ney.googlevideo.com/videoplayback?expire=1722702805&ei=dQeuZrC_MZGkp-oProGcmAY&ip=41.216.203.29&id=o-ALbOzTu2tWguFpQuKNDHB_oPZq8o6ZvNX6gyh4TDRF80&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&bui=AXc671JXfdY4i7DD5I82dLPs3rHUUiuKBKSYozuKi6lZjBOyrVTcXeervA84DXlcOS1RRVFSJaNN1HFv&spc=NO7bAcnhti3_SBZCfAWyZzGIW1hjzNxm0cI-i4YnVhMHV2THR8lnFd2IZTaylkA&vprv=1&svpuc=1&mime=video%2Fmp4&ns=sQiOOQ08dIf121FBjmVNw74Q&rqh=1&gir=yes&clen=40289460&ratebypass=yes&dur=477.982&lmt=1722607431566185&c=WEB&sefc=1&txp=5538434&n=v6ovJiNh-mpzSw&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Cns%2Crqh%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRgIhAMfn5m2dkbY3So3ZalhvLa0Tei9-mf4_hZXE3BCHfiyAAiEAitaoCF4U1pGwIgmhQgi3sZjp3qFPPvrFFGbyL1YG-R0%3D&title=%5BONCAM%5D%20PANAS%20YA%20BANG%3F%20MATCH%20VIRAL%20%20GSX%20STD%20PORTING%20!&rm=sn-g5po15-j2ue7l,sn-woce776&rrc=79,104&fexp=24350516,24350518,24350557&req_id=a7b5255fcad9a3ee&redirect_counter=2&cms_redirect=yes&cmsv=e&ipbypass=yes&mh=Ev&mip=110.138.90.203&mm=29&mn=sn-aigl6ney&ms=rdu&mt=1722689646&mv=D&mvi=5&pl=0&lsparams=ipbypass,mh,mip,mm,mn,ms,mv,mvi,pl&lsig=AGtxev0wRgIhAPYOE3xoSFQn_VBnXE3AIrUXqZSg_viLfssgTvTkJcGOAiEAwNmNhSjsRxvr76JrInysUbfyf6PzYN3f57XUUqGLELY%3D', // Add video URL if available
-        commentsCount: 12,
-        likesCount: 56,
-        bookMarksCount: 2,
-      },
-      {
-        userName: 'frontendgariskeras',
-        userHandle: 'frontend',
-        userAvatar: '',
-        content: '2 stroke menolak punah ',
-        image: 'https://i.pinimg.com/564x/43/7e/a8/437ea88ad75d8ab66c26b75e4b5d28e8.jpg',
-        video: '', // Add video URL if available
-        commentsCount: 12,
-        likesCount: 56,
-        bookMarksCount: 2,
-      },
-      {
-        userName: 'admin',
-        userHandle: 'adminsl0t',
-        userAvatar: '',
-        content: 'kakak aknes ygy',
-        image: '',
-        video: '', // Example video URL
-        commentsCount: 12,
-        likesCount: 56,
-        bookMarksCount: 2,
-      },
-      {
-        userName: 'noturfavmikaaa',
-        userHandle: 'mikaa',
-        userAvatar: '',
-        content: 'sigma skibidi toilet',
-        image: '',
-        video: '', // Add video URL if available
-        commentsCount: 12,
-        likesCount: 56,
-        bookMarksCount: 2,
-      },
-      // Add more tweet post here
-    ]);
+    const token = await AsyncStorage.getItem('token');
+    try {
+      const response = await axios.post(`${serverUrl}/userdata`, {token});
+      const {data, status} = response.data;
+      console.log('Data received:', data); // Add this log to check the data
+      if (status === 'error') {
+        Alert.alert('Error', 'Anda Telah Keluar dari Akun', [
+          {text: 'OK', onPress: () => navigation.navigate('Auths')},
+        ]);
+        return;
+      }
+      // Fetch Data Tweet
+      setTweets([...data, ...tweets]); // Combine fetched tweets with example tweets
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
   }
 
   const handleBackPress = () => {
-    Alert.alert(
-      'Exit App',
-      'Are you sure want to exit',
-      [{
-        text: 'Cancel',
+    Alert.alert('Exit App', 'Are you sure want to exit', [
+      {
+        text: 'cancel',
         onPress: () => null,
-        style: 'cancel'
-      }, {
+        style: 'cancel',
+      },
+      {
         text: 'Exit',
-        onPress: () => BackHandler.exitApp()
-      }]
-    );
+        onPress: () => BackHandler.exitApp(),
+      },
+    ]);
     return true;
-  }
+  };
 
   useFocusEffect(
-    React.useCallback(() => {
-      BackHandler.addEventListener("hardwareBackPress", handleBackPress);
+    useCallback(() => {
+      BackHandler.addEventListener('hardwareBackPress', handleBackPress);
       return () => {
-        BackHandler.removeEventListener("hardwareBackPress", handleBackPress);
-      }
-    })
+        BackHandler.removeEventListener('hardwareBackPress', handleBackPress);
+      };
+    }, []),
   );
 
-  useEffect(() => {
-    getData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getData();
+    }, []),
+  );
 
-  const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
-    Alert.alert(
-      'Logout Account',
-      'Are you sure want to Logout',
-      [{
-        text: 'Cancel',
-        onPress: () => null,
-        style: 'cancel'
-      }, {
-        text: 'Logout',
-        onPress: () => navigation.navigate('Auths'),
-      }]
+  const handleOpenCamera = () => {
+    const options = {
+      mediaType: 'photo',
+      saveToPhotos: true,
+    };
+
+    ImagePicker.launchCamera(options, response => {
+      if (response.didCancel) {
+        console.log('User cancelled photo');
+        // Reset isExpanded value to ensure FAB does not disappear
+        isExpanded.value = false;
+      } else if (response.error) {
+        console.log('ImagePicker Error: ', response.error);
+      } else {
+        const uri = response.assets[0].uri;
+        setCapturedImageUri(uri);
+        console.log('Captured image URI:', uri);
+        // Navigate to CreatePost and pass the image URI
+        navigation.navigate('CreatePost', {imageUri: uri});
+      }
+    });
+  };
+
+  const FloatingActionButton = ({isExpanded, index, iconName, onPress}) => {
+    const animatedStyles = useAnimatedStyle(() => {
+      const moveValue = isExpanded.value ? OFFSET * index : 0;
+      const translateValue = withSpring(-moveValue, SPRING_CONFIG);
+      const delay = index * 100;
+      const scaleValue = isExpanded.value ? 1 : 0;
+
+      return {
+        transform: [
+          {translateY: translateValue},
+          {scale: withDelay(delay, withTiming(scaleValue))},
+        ],
+        backgroundColor: isExpanded.value ? '#F3F3F3' : '#F3F3F3',
+      };
+    });
+
+    const iconStyle = useAnimatedStyle(() => {
+      return {
+        color: isExpanded.value ? '#000' : '#000',
+      };
+    });
+
+    return (
+      <AnimatedPressable
+        style={[animatedStyles, styles.shadow, styles.button]}
+        onPress={onPress}>
+        <Icon name={iconName} size={20} style={[styles.icon, iconStyle]} />
+      </AnimatedPressable>
     );
   };
+
+  const handlePress = () => {
+    isExpanded.value = !isExpanded.value;
+  };
+
+  const plusIconStyle = useAnimatedStyle(() => {
+    const moveValue = interpolate(Number(isExpanded.value), [0, 1], [0, 2]);
+    const translateValue = withTiming(moveValue);
+    const rotateValue = isExpanded.value ? '45deg' : '0deg';
+
+    return {
+      transform: [
+        {translateX: translateValue},
+        {rotate: withTiming(rotateValue)},
+      ],
+    };
+  });
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.contentContainer}>
-        {tweets.map((tweet, index) => (
-          <View key={index} style={styles.tweetContainer}>
-            <TweetCard tweet={tweet} />
-          </View>
-        ))}
-        <Text style={styles.contentText}>Hi, {userData.username}</Text>
-        <TouchableOpacity style={styles.buttonLogout} onPress={handleLogout}>
-          <Text style={styles.contentText}>Logout</Text>
-        </TouchableOpacity>
+        {Array.isArray(tweets) && tweets.length > 0 ? (
+          tweets.map((tweet, index) => (
+            <View key={index} style={styles.tweetContainer}>
+              <TweetCard tweet={tweet} />
+            </View>
+          ))
+        ) : (
+          <Text style={styles.noTweetsText}>No tweets available</Text>
+        )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => console.log('Button pressed')}>
-        <MaterialCommunityIcons name="plus" size={40} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.fabContainer}>
+        <AnimatedPressable
+          onPress={handlePress}
+          style={[styles.shadow, mainButtonStyles.button]}>
+          <Animated.Text style={[plusIconStyle, mainButtonStyles.content]}>
+            +
+          </Animated.Text>
+        </AnimatedPressable>
+        <FloatingActionButton
+          isExpanded={isExpanded}
+          index={1}
+          iconName={'camera-outline'}
+          onPress={handleOpenCamera} // Added onPress handler to open camera
+        />
+        <FloatingActionButton
+          isExpanded={isExpanded}
+          index={2}
+          iconName={'feather'}
+          onPress={() => navigation.navigate('CreatePost')} // Navigate to CreatePost screen
+        />
+      </View>
     </SafeAreaView>
   );
-}
+};
 
-export default HomeScreen;
+const SPRING_CONFIG = {
+  duration: 1200,
+  overshootClamping: true,
+  dampingRatio: 0.8,
+};
+
+const OFFSET = 60;
+
+const AnimatedPressable = Animated.createAnimatedComponent(TouchableOpacity);
+
+const mainButtonStyles = StyleSheet.create({
+  button: {
+    zIndex: 1,
+    height: 66,
+    width: 66,
+    borderRadius: 100,
+    backgroundColor: '#001374',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    fontSize: 48,
+    color: '#f8f9ff',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -152,41 +263,53 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    alignItems: 'center', // Aligns items in the center horizontally
+    alignItems: 'center',
     paddingBottom: 20,
   },
   tweetContainer: {
-    width: '100%', // Ensures the TweetCard takes full width of the screen
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    width: '100%',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
   },
-  contentText: {
-    fontSize: 18,
-    color: '#000',
-    marginVertical: 10, // Adds margin around the text
-  },
-  fab: {
+  fabContainer: {
     position: 'absolute',
-    bottom: 25,
-    right: 25,
-    width: 65,
-    height: 65,
-    backgroundColor: '#001374',
-    borderRadius: 35,
+    bottom: 20,
+    right: 20,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  button: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#fff',
+    position: 'absolute',
+    borderRadius: 100,
+    display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    zIndex: 1,
+    flexDirection: 'row',
+  },
+  shadow: {
+    shadowColor: '#171717',
+    shadowOffset: {width: -0.5, height: 3.5},
+    shadowOpacity: 0.2,
     shadowRadius: 3,
   },
-  buttonLogout: {
-    width: 100,
-    height: 60,
-    backgroundColor: 'red',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+  icon: {
+    color: '#000',
+  },
+  noTweetsText: {
+    textAlign: 'left',
+    color: '#888',
+    marginTop: 20,
+  },
+  capturedImage: {
+    width: '100%',
+    height: 200,
+    marginTop: 20,
+    borderRadius: 10,
   },
 });
+
+export default HomeScreen;

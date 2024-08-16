@@ -1,5 +1,12 @@
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
-import React, { useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+} from 'react-native';
+import React, {useState} from 'react';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Toast from 'react-native-toast-message';
 import axios from 'axios';
@@ -7,7 +14,7 @@ import config from '../../config';
 
 const serverUrl = config.SERVER_URL;
 
-const RegisterScreen = ({ navigation }) => {
+const RegisterScreen = ({navigation}) => {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -18,57 +25,80 @@ const RegisterScreen = ({ navigation }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const validateUsername = (username) => {
-    const usernameRegex = /^[a-zA-Z0-9_]{3,15}$/; // Lowercase letters and numbers only, 4-15 characters
-    return usernameRegex.test(username) && !username.includes(' '); // No spaces
+  const validateName = name => {
+    const nameRegex = /^[a-zA-Z]+( [a-zA-Z]+)*$/;
+    return nameRegex.test(name) && name.length <= 40;
   };
 
-  const validateName = (name) => {
-    const nameRegex = /^[a-z0-9]{4,15}$/;
-    return nameRegex.test(name);
+  const validateUsername = username => {
+    const usernameRegex = /^[a-z0-9]{4,15}$/;
+    return usernameRegex.test(username) && !username.includes(' ');
   };
 
-  const validatePassword = (password) => {
+  const validateEmail = email => {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePassword = password => {
     const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,15}$/;
     return passwordRegex.test(password);
+  };
+
+  const validateConfirmPassword = (password, confirmPassword) => {
+    return password === confirmPassword;
   };
 
   const handleSignup = () => {
     const newErrors = {};
     let valid = true;
 
+    // Validate Name
     if (!name) {
       newErrors.name = 'Name cannot be empty';
       valid = false;
     } else if (!validateName(name)) {
-      newErrors.name = 'Can only use letters of the alphabet and a maximum of 45 letters.';
+      newErrors.name =
+        'Name can only contain letters and spaces, and must be up to 40 characters long.';
       valid = false;
     }
 
+    // Validate Username
     if (!username) {
       newErrors.username = 'Username cannot be empty';
       valid = false;
     } else if (!validateUsername(username)) {
-      newErrors.username = 'Invalid username. Must be 4-15 characters long, lowercase letters and numbers only, with no spaces.';
+      newErrors.username =
+        'Invalid username. Must be 4-15 characters long, lowercase letters and numbers only, with no spaces.';
       valid = false;
     }
 
+    // Validate Email
     if (!email) {
       newErrors.email = 'Email cannot be empty';
       valid = false;
-    } else if (!email.includes('@')) {
-      newErrors.email = 'Invalid email address';
+    } else if (!validateEmail(email)) {
+      newErrors.email = 'Invalid email address. Must be a Gmail address.';
       valid = false;
     }
 
+    // Validate Password
     if (!password) {
       newErrors.password = 'Password cannot be empty';
       valid = false;
     } else if (!validatePassword(password)) {
-      newErrors.password = 'Password must be more than 8 - 15 characters and character combinations.';
+      newErrors.password =
+        'Password must be 8-15 characters long, and include both letters and numbers.';
       valid = false;
     }
 
+    // Validate Confirm Password
+    if (!validateConfirmPassword(password, confirmpassword)) {
+      newErrors.confirmpassword = 'Passwords do not match';
+      valid = false;
+    }
+
+    // Validate Terms and Conditions
     if (!isCheckedTerms) {
       Toast.show({
         type: 'info',
@@ -78,18 +108,19 @@ const RegisterScreen = ({ navigation }) => {
       valid = false;
     }
 
+    // Set Errors and Proceed if Valid
     setErrors(newErrors);
 
     if (valid) {
-      const userData = { name, username, email, password };
+      const userData = {name, username, email, password};
 
       setTimeout(() => {
         axios
           .post(`${serverUrl}/register`, userData)
           .then(res => {
-            const { status } = res.data;
+            const {status} = res.data;
             switch (status) {
-              case "ok":
+              case 'ok':
                 Toast.show({
                   type: 'success',
                   text1: 'Success',
@@ -98,21 +129,21 @@ const RegisterScreen = ({ navigation }) => {
                     setTimeout(() => {
                       navigation.navigate('Signin');
                     }, 1500);
-                  }
+                  },
                 });
                 break;
-              case "alreadyUser":
+              case 'alreadyUser':
                 Toast.show({
                   type: 'error',
                   text1: 'Error',
-                  text2: "User Already Exists!!",
+                  text2: 'User Already Exists!!',
                 });
                 break;
-              case "alreadyEmail":
+              case 'alreadyEmail':
                 Toast.show({
                   type: 'error',
                   text1: 'Error',
-                  text2: "Email Already Exists!!",
+                  text2: 'Email Already Exists!!',
                 });
                 break;
               default:
@@ -131,10 +162,17 @@ const RegisterScreen = ({ navigation }) => {
               text2: 'An error occurred. Please try again later.',
             });
           });
-      }, 1000); // Delay 1 detik
+      }, 1000); // Delay 1 second
     }
   };
 
+  const showEmailWarning = () => {
+    Toast.show({
+      type: 'info',
+      text1: 'Warning',
+      text2: 'Email wajib terhubung dengan google!',
+    });
+  };
 
   return (
     <>
@@ -145,7 +183,7 @@ const RegisterScreen = ({ navigation }) => {
           onChangeText={text => setName(text.slice(0, 40))}
           value={name}
           placeholder="Name"
-          autoCapitalize="none"
+          autoCapitalize="words"
         />
         {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
         <TextInput
@@ -155,17 +193,24 @@ const RegisterScreen = ({ navigation }) => {
           placeholder="Username"
           autoCapitalize="none"
         />
-        {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+        {errors.username && (
+          <Text style={styles.errorText}>{errors.username}</Text>
+        )}
         <TextInput
           style={[styles.input, errors.email ? styles.errorInput : null]}
           onChangeText={text => setEmail(text)}
+          onFocus={showEmailWarning} // Show warning when input is focused
           value={email}
           placeholder="Email"
           keyboardType="email-address"
           autoCapitalize="none"
         />
         {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-        <View style={[styles.passwordContainer, errors.password ? styles.errorInput : null]}>
+        <View
+          style={[
+            styles.passwordContainer,
+            errors.password ? styles.errorInput : null,
+          ]}>
           <TextInput
             style={styles.passwordInput}
             onChangeText={text => setPassword(text.slice(0, 25))}
@@ -176,16 +221,25 @@ const RegisterScreen = ({ navigation }) => {
           />
           <TouchableOpacity
             style={styles.eyeIcon}
-            onPress={() => setShowPassword(!showPassword)}
-          >
-            <Icon name={showPassword ? "visibility" : "visibility-off"} size={18} color="#000000" />
+            onPress={() => setShowPassword(!showPassword)}>
+            <Icon
+              name={showPassword ? 'visibility' : 'visibility-off'}
+              size={18}
+              color="#000000"
+            />
           </TouchableOpacity>
         </View>
-        {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-        <View style={styles.passwordContainer}>
+        {errors.password && (
+          <Text style={styles.errorText}>{errors.password}</Text>
+        )}
+        <View
+          style={[
+            styles.passwordContainer,
+            errors.confirmpassword ? styles.errorInput : null,
+          ]}>
           <TextInput
             style={styles.passwordInput}
-            onChangeText={setConfirmPassword}
+            onChangeText={text => setConfirmPassword(text.slice(0, 25))}
             value={confirmpassword}
             placeholder="Confirm Password"
             secureTextEntry={!showConfirmPassword}
@@ -193,29 +247,53 @@ const RegisterScreen = ({ navigation }) => {
           />
           <TouchableOpacity
             style={styles.eyeIcon}
-            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-          >
-            <Icon name={showConfirmPassword ? "visibility" : "visibility-off"} size={18} color="#000000" />
+            onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+            <Icon
+              name={showConfirmPassword ? 'visibility' : 'visibility-off'}
+              size={18}
+              color="#000000"
+            />
           </TouchableOpacity>
         </View>
+        {errors.confirmpassword && (
+          <Text style={styles.errorText}>{errors.confirmpassword}</Text>
+        )}
         <View style={styles.checkboxContainer}>
           <TouchableOpacity
             style={styles.checkbox}
-            onPress={() => setIsCheckedTerms(!isCheckedTerms)}
-          >
-            <Icon name={isCheckedTerms ? "check-box" : "check-box-outline-blank"} size={24} color="#000000" />
+            onPress={() => setIsCheckedTerms(!isCheckedTerms)}>
+            <Icon
+              name={isCheckedTerms ? 'check-box' : 'check-box-outline-blank'}
+              size={24}
+              color="#000000"
+            />
           </TouchableOpacity>
-          <Text style={styles.checkboxLabel}>I agree to the <Text style={styles.termslink} onPress={() => navigation.navigate('Termsandcondition')}>terms and conditions</Text></Text>
+          <Text style={styles.checkboxLabel}>
+            I agree to the{' '}
+            <Text
+              style={styles.termslink}
+              onPress={() => navigation.navigate('Termsandcondition')}>
+              terms and conditions
+            </Text>
+          </Text>
         </View>
         <TouchableOpacity style={styles.buttonSignup} onPress={handleSignup}>
           <Text style={styles.textSignUp}>Sign Up</Text>
         </TouchableOpacity>
-        <Text style={styles.loginText}>Already signed up? <Text style={styles.loginLink} onPress={() => navigation.navigate('Signin')}>Log In</Text></Text>
+        <Text style={styles.loginText}>
+          Already signed up?{' '}
+          <Text
+            style={styles.loginLink}
+            onPress={() => navigation.navigate('Signin')}>
+            Log In
+          </Text>
+        </Text>
       </ScrollView>
       <Toast />
     </>
   );
 };
+
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
@@ -275,7 +353,7 @@ const styles = StyleSheet.create({
   buttonSignup: {
     width: '80%',
     height: 50,
-    backgroundColor: '#0a3e99',
+    backgroundColor: '#001374',
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
@@ -289,7 +367,7 @@ const styles = StyleSheet.create({
   termslink: {
     color: '#0a3e99',
     fontWeight: 'bold',
-    textDecorationLine: 'underline'
+    textDecorationLine: 'underline',
   },
   errorText: {
     color: 'red',

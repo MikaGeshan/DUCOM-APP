@@ -9,7 +9,7 @@ This is a React Native project built using [React Native](https://reactnative.de
 - **Custom Animated Sidebar**: Implemented in the `Header` component.
 - **Bottom Tab Navigator**: Using `createMaterialBottomTabNavigator`.
 - **Screens**: Auth, FAQ, Forgot Password, Home, Register, Sign In, Splash.
-- **Notifications**: Using `react-native-toast-message`.
+- **Notifications**: Using `react-native-alert-notification`.
 - **Video Playback**: Using `react-native-video` version 5.
 - **Dropdowns**: Using `react-native-element-dropdown`.
 - **Backend**: Node.js with Express and MongoDB for user management.

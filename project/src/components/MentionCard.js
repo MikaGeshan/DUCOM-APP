@@ -7,14 +7,13 @@ import {
   TouchableOpacity,
   Modal,
   TouchableWithoutFeedback,
-  Share,
-  ActivityIndicator,
+  Share, // Import Share module
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
-import DefaultAvatar from '../assets/avatar.png';
+import DefaultAvatar from '../assets/avatar.png'; 
 
-const TweetCard = ({tweet}) => {
+const MentionCard = ({tweet}) => {
   const [liked, setLiked] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [likesCount, setLikesCount] = useState(tweet.likesCount);
@@ -22,7 +21,6 @@ const TweetCard = ({tweet}) => {
   const [commentsCount, setCommentsCount] = useState(tweet.commentsCount);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [modalMediaUri, setModalMediaUri] = useState('');
-  const [isVideoLoaded, setIsVideoLoaded] = useState(false); // State for video loading
 
   const handleLike = () => {
     setLiked(prev => !prev);
@@ -46,16 +44,22 @@ const TweetCard = ({tweet}) => {
     setModalMediaUri('');
   };
 
+  // Function to handle sharing
   const handleShare = async () => {
     try {
       await Share.share({
         message: tweet.content,
-        url: tweet.image || tweet.video,
+        // url: tweet.image || tweet.video,
         title: tweet.userName,
       });
     } catch (error) {
       console.error('Error sharing:', error.message);
     }
+  };
+
+  const formatDate = dateString => {
+    const date = new Date(dateString);
+    return `${date.getDate()} ${date.getMonth() + 1} ${date.getFullYear()}`;
   };
 
   return (
@@ -69,19 +73,7 @@ const TweetCard = ({tweet}) => {
         <View style={styles.userDetails}>
           <Text style={styles.userName}>{tweet.userName}</Text>
           <Text style={styles.userHandle}>@{tweet.userHandle}</Text>
-        </View>
-
-        {/* Options Button */}
-        <View style={styles.optionsContainer}>
-          <TouchableOpacity
-            style={styles.optionsButton}
-            onPress={() => console.log('More options pressed')}>
-            <MaterialCommunityIcons
-              name="dots-horizontal"
-              size={24}
-              color="#657786"
-            />
-          </TouchableOpacity>
+          <Text style={styles.postDate}>{formatDate(tweet.postDate)}</Text>
         </View>
       </View>
 
@@ -91,28 +83,16 @@ const TweetCard = ({tweet}) => {
       {/* Tweet Media */}
       {tweet.image || tweet.video ? (
         <TouchableOpacity
-          onPress={() => openMediaPreview(tweet.image || tweet.video)}
-          style={styles.mediaContainer}>
+          onPress={() => openMediaPreview(tweet.image || tweet.video)}>
           {tweet.image ? (
             <Image source={{uri: tweet.image}} style={styles.tweetImage} />
           ) : (
-            <View style={styles.videoContainer}>
-              {!isVideoLoaded && (
-                <ActivityIndicator
-                  size="large"
-                  color="#000"
-                  style={styles.videoLoader}
-                />
-              )}
-              <Video
-                source={{uri: tweet.video}}
-                style={styles.video}
-                controls
-                resizeMode="contain"
-                onLoad={() => setIsVideoLoaded(true)} // Set video loaded state
-                onError={() => setIsVideoLoaded(true)} // Ensure loader hides on error
-              />
-            </View>
+            <Video
+              source={{uri: tweet.video}}
+              style={styles.tweetImage}
+              controls
+              resizeMode="contain"
+            />
           )}
         </TouchableOpacity>
       ) : null}
@@ -201,32 +181,31 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    position: 'relative',
   },
   avatar: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 49,
     borderRadius: 24,
     marginRight: 12,
   },
   userDetails: {
-    flex: 1,
-  },
-  userName: {
-    fontWeight: 'bold',
-    color: '#040608',
-  },
-  userHandle: {
-    color: '#00c5ff',
-  },
-  optionsContainer: {
-    position: 'absolute',
-    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  optionsButton: {
-    marginLeft: 10,
+  userName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#040608',
+    marginRight: 4,
+  },
+  userHandle: {
+    color: '#718096',
+    fontWeight: '700',
+    marginRight: 8,
+  },
+  postDate: {
+    color: '#718096',
+    fontSize: 12,
   },
   tweetText: {
     fontSize: 15,
@@ -238,24 +217,6 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 8,
     marginVertical: 8,
-  },
-  videoContainer: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginVertical: 8,
-    position: 'relative', // Ensure ActivityIndicator is positioned correctly
-  },
-  video: {
-    width: '100%',
-    height: '100%',
-  },
-  videoLoader: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{translateX: -25}, {translateY: -25}],
   },
   actions: {
     flexDirection: 'row',
@@ -288,4 +249,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default TweetCard;
+export default MentionCard;
