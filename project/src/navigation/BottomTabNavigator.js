@@ -1,43 +1,61 @@
-import React, {useState} from 'react';
-import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import React, { useState, useCallback } from 'react';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
-import {Image, StyleSheet, View, Text} from 'react-native';
-import {Profilescreen, Notificationscreen} from '../pages';
+import { Image, StyleSheet, View, Text } from 'react-native';
+import { Profilescreen, Notificationscreen } from '../pages';
 import DrawerNavigator from './DrawerNavigator';
-import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import {useFocusEffect} from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import config from '../config';
 const serverUrl = config.SERVER_URL;
+
 import TopTabNavigator from './TopTabNavigator';
 
-// Import the profile image
-import profileImage from './../assets/profile.png';
+import profileImage from './../assets/profilepic.png';
 
 const Tab = createBottomTabNavigator();
 
 function BottomTabNavigator() {
-  const [userData, setUserData] = useState('');
-  async function getData() {
-    const token = await AsyncStorage.getItem('token');
-    console.log(token);
-    axios.post(`${serverUrl}/userdata`, {token: token}).then(res => {
-      console.log(res.data);
-      setUserData(res.data.data);
-      // UNTUK CONTOH PENGAPLIKASIAN DATANYA = {userData.name}
-    });
-  }
+  const [profilePicture, setProfilePicture] = useState('');
+
+  // Fungsi untuk mengambil data pengguna
+  const getData = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      console.log('Token Retrieved Successfully');
+
+      // Ambil data pengguna
+      const userResponse = await axios.post(`${serverUrl}/userdata`, {
+        token: token,
+      });
+      console.log('Data Retrieved Successfully');
+
+      const user = userResponse.data.data;
+
+      if (user.profilePicture) {
+        const profile = { uri: user.profilePicture };
+        setProfilePicture(profile);
+        console.log('Image Profile Retrieved Successfully');
+      }
+    } catch (error) {
+      console.error('Error occurred:', error);
+    }
+  }, []);
+
+  // Memanggil getData setiap kali tab "Profile" mendapatkan fokus
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       getData();
-      console.log('refresh');
-    }, []),
+    }, [getData])
   );
+
   return (
-    <GestureHandlerRootView style={{flex: 1}}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <Tab.Navigator
-        screenOptions={({route}) => ({
-          tabBarIcon: ({color}) => {
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ color }) => {
             let iconName;
             const iconSize = 30;
 
@@ -54,8 +72,8 @@ function BottomTabNavigator() {
             } else if (route.name === 'Profile') {
               return (
                 <Image
-                  source={profileImage}
-                  style={[styles.icon, {tintColor: undefined}]}
+                  source={profilePicture || profileImage}
+                  style={[styles.icon, { tintColor: undefined }]}
                 />
               );
             }

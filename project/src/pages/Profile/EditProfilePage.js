@@ -4,48 +4,74 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
+  ImageBackground,
   TextInput,
   ScrollView,
   Alert,
-  ImageBackground,
+  useColorScheme,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {SafeAreaView} from 'react-native';
+import {Skeleton} from 'react-native-elements';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {launchImageLibrary} from 'react-native-image-picker';
-import axios from 'axios';
+import {
+  ALERT_TYPE,
+  Dialog,
+  AlertNotificationRoot,
+} from 'react-native-alert-notification';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ImagePicker from 'react-native-image-crop-picker';
+import axios from 'axios';
 import config from '../../config';
+
 const serverUrl = config.SERVER_URL;
 
 export default function EditProfilePage() {
   const navigation = useNavigation();
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
-  const [banner, setBanner] = useState(null);
-  const [profilePicture, setProfilePicture] = useState(null);
+  const [banner, setBanner] = useState('');
+  const [profilePicture, setProfilePicture] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState(null);
   const [username, setUsername] = useState('');
-  const [hasChanges, setHasChanges] = useState(false); // Track if there are changes
-
-  const initialData = {
-    username: '',
-    name: '',
-    bio: '',
-  };
+  const [isSaving, setIsSaving] = useState(false);
+  const [newProfileImage, setNewProfileImage] = useState('');
+  const [newBannerImage, setNewBannerImage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isBannerLoading, setIsBannerLoading] = useState(true);
+  const [isProfilePictureLoading, setIsProfilePictureLoading] = useState(true);
+  const colorScheme = useColorScheme();
+  const styles = getStyles(colorScheme); // Get styles based on color scheme
 
   async function getData() {
-    const token = await AsyncStorage.getItem('token');
-    console.log(token);
-    axios.post(`${serverUrl}/userdata`, {token: token}).then(res => {
-      console.log(res.data);
-      setUserData(res.data.data);
-      setUsername(`@${res.data.data.username}`);
-      setName(res.data.data.name);
-      setBio(res.data.data.bio);
-    });
+    try {
+      const token = await AsyncStorage.getItem('token');
+      console.log('Token Retrieved Successfully');
+
+      const userResponse = await axios.post(`${serverUrl}/userdata`, {token});
+      console.log('Data Retrieved Successfully');
+
+      const user = userResponse.data.data;
+      setUserData(user);
+      setUsername(user.username);
+
+      if (user.bannerPicture) {
+        const banner = {uri: user.bannerPicture};
+        setBanner(banner);
+        console.log('Image Banner Retrieved Successfully');
+      }
+
+      if (user.profilePicture) {
+        const profile = {uri: user.profilePicture};
+        setProfilePicture(profile);
+        console.log('Image Profile Retrieved Successfully');
+      }
+    } catch (error) {
+      console.error('Error occurred:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -53,20 +79,45 @@ export default function EditProfilePage() {
   }, []);
 
   useEffect(() => {
+    if (banner) {
+      setIsBannerLoading(false);
+    }
+  }, [banner]);
+
+  useEffect(() => {
+    if (profilePicture) {
+      setIsProfilePictureLoading(false);
+    }
+  }, [profilePicture]);
+
+  const validateUsername = username => {
+    const usernameRegex = /^[a-z0-10]{4,15}$/;
+    return usernameRegex.test(username) && !username.includes(' ');
+  };
+  const validateName = name => {
+    const nameRegex = /^[a-zA-Z]+( [a-zA-Z]+)*$/;
+    return nameRegex.test(name) && name.length <= 40;
+  };
+
+  useEffect(() => {
     const beforeRemoveListener = navigation.addListener('beforeRemove', e => {
-      if (!hasChanges) {
-        return; // No need to show alert if no changes
+      if (isSaving) {
+        return;
       }
+
       e.preventDefault();
       Alert.alert('Konfirmasi', 'Apakah anda ingin membatalkan perubahan?', [
-        {text: 'Tidak', style: 'cancel', onPress: () => {}},
         {
-          text: 'Ya',
-          style: 'destructive',
+          text: 'No',
+          style: 'cancel',
+          onPress: () => {},
+        },
+        {
+          text: 'Yes',
           onPress: () => {
-            setUsername(`@${userData.username}`);
-            setName(userData.name);
-            setBio(userData.bio);
+            setUsername(userData?.username);
+            setName(userData?.name);
+            setBio(userData?.bio);
             navigation.dispatch(e.data.action);
           },
         },
@@ -74,245 +125,426 @@ export default function EditProfilePage() {
     });
 
     return beforeRemoveListener;
-  }, [navigation, userData, hasChanges]);
+  }, [navigation, userData, isSaving]);
 
-  const validateUsername = username => {
-    const usernameRegex = /^[a-z0-9]{4,15}$/;
-    return usernameRegex.test(username) && !username.includes(' ');
-  };
+  navigation.setOptions({
+    headerRight: () => (
+      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+        <Text style={styles.saveButtonText}> Save </Text>
+      </TouchableOpacity>
+    ),
+  });
 
-  const handleSave = () => {
-    if (!validateUsername(username)) {
-      Alert.alert('Error', 'Username tidak valid.');
-      return;
-    }
-    Alert.alert('Konfirmasi', 'Apakah anda ingin menyimpan perubahan?', [
-      {text: 'Tidak', style: 'cancel', onPress: () => {}},
+  const handleSave = async () => {
+    setIsSaving(true);
+
+    Alert.alert('Confirmation', 'Do you want to save the changes?', [
+      {text: 'No', style: 'cancel', onPress: () => setIsSaving(false)},
       {
-        text: 'Ya',
+        text: 'Yes',
         style: 'default',
-        onPress: () => {
-          setHasChanges(false); // Reset the change tracker after saving
-          alert('Perubahan disimpan');
+        onPress: async () => {
+          try {
+            if (!username) {
+              Dialog.show({
+                type: ALERT_TYPE.DANGER,
+                title: 'Invalid username',
+                textBody: 'Username cannot be empty!',
+              });
+              return;
+            } else if (!validateUsername(username)) {
+              Dialog.show({
+                type: ALERT_TYPE.DANGER,
+                title: 'Invalid Username',
+                textBody:
+                  '4-15 characters, only lowercase letters and numbers without spaces.',
+              });
+              return;
+            }
+
+            // Only validate name if it's different from the current name
+            if (name && name !== userData?.name && !validateName(name)) {
+              Dialog.show({
+                type: ALERT_TYPE.DANGER,
+                title: 'Invalid Name',
+                textBody: 'Name can only be alphabetical and maximum 40 char.',
+              });
+              return;
+            }
+
+            const token = await AsyncStorage.getItem('token');
+            const updatedUserData = {token: token};
+
+            if (name && name !== userData?.name) {
+              updatedUserData.name = name;
+            }
+
+            if (username && username !== userData?.username) {
+              const checkUsernameResponse = await axios.post(
+                `${serverUrl}/check-username`,
+                {username},
+              );
+              if (checkUsernameResponse.data.status === 'error') {
+                setIsSaving(false);
+                Dialog.show({
+                  type: ALERT_TYPE.DANGER,
+                  title: 'Error',
+                  textBody: 'Username already exists!',
+                });
+                return;
+              }
+              updatedUserData.username = username;
+            }
+
+            if (bio && bio !== userData?.bio) {
+              updatedUserData.bio = bio;
+            }
+
+            // Upload the new profile image if exists
+            if (newProfileImage) {
+              const profileFormData = new FormData();
+              profileFormData.append('image', {
+                uri: newProfileImage.path,
+                name: newProfileImage.filename || 'profile.jpg',
+                type: newProfileImage.mime,
+              });
+              profileFormData.append('token', token);
+
+              await axios.post(
+                `${serverUrl}/upload-image-profile`,
+                profileFormData,
+                {
+                  headers: {
+                    'Content-Type': 'multipart/form-data',
+                  },
+                },
+              );
+            }
+
+            // Upload the new banner image if exists
+            if (newBannerImage) {
+              const bannerFormData = new FormData();
+              bannerFormData.append('image', {
+                uri: newBannerImage.path,
+                name: newBannerImage.filename || 'banner.jpg',
+                type: newBannerImage.mime,
+              });
+              bannerFormData.append('token', token);
+
+              await axios.post(
+                `${serverUrl}/upload-image-banner`,
+                bannerFormData,
+                {
+                  headers: {
+                    'Content-Type': 'multipart/form-data',
+                  },
+                },
+              );
+            }
+
+            const response = await axios.post(
+              `${serverUrl}/update-profile`,
+              updatedUserData,
+            );
+
+            if (response.data.status === 'update') {
+              Dialog.show({
+                type: ALERT_TYPE.SUCCESS,
+                title: 'Success',
+                textBody: 'Updated Successfully!',
+                onHide: () => {
+                  setTimeout(() => {
+                    Dialog.hide();
+                    navigation.goBack();
+                  }, 1000); // Delay 1 second before hiding the dialog and navigating back
+                },
+              });
+            } else {
+              setIsSaving(false);
+              Dialog.show({
+                type: ALERT_TYPE.DANGER,
+                title: 'Error',
+                textBody: 'An Error Occurred. Please Try Again Later.',
+              });
+            }
+          } catch (error) {
+            setIsSaving(false);
+            console.error('Error updating profile:', error);
+            Alert.alert('Error', 'Failed to update profile');
+          }
         },
       },
     ]);
   };
 
-  const uploadImage = async (image, type) => {
-    const formData = new FormData();
-    formData.append('image', {
-      uri: image.uri,
-      type: 'image/jpeg',
-      name: 'upload.jpg',
-    });
+  const MAX_IMAGE_SIZE_MB = 5; // Maksimal ukuran gambar dalam MB
 
-    try {
-      const response = await axios.post('URL_TO_UPLOAD_IMAGE', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+  const selectImageProfile = () => {
+    ImagePicker.openPicker({
+      width: 400,
+      height: 400,
+      cropping: true,
+      mediaType: 'photo',
+      cropperCircleOverlay: true,
+      avoidEmptySpaceAroundImage: true,
+    })
+      .then(image => {
+        if (image.size / 1024 / 1024 > MAX_IMAGE_SIZE_MB) {
+          Alert.alert('Error', 'Image size exceeds 5 MB.');
+          return;
+        }
+        setNewProfileImage(image);
+        setProfilePicture({uri: image.path});
+      })
+      .catch(error => {
+        console.error('Error selecting image:', error);
       });
-      if (type === 'banner') {
-        setBanner({uri: response.data.imageUrl});
-      } else {
-        setProfilePicture({uri: response.data.imageUrl});
-      }
-      Alert.alert('Success', 'Image uploaded successfully');
-      setHasChanges(true); // Set change tracker when an image is uploaded
-    } catch (error) {
-      console.log('Upload error: ', error);
-      Alert.alert('Error', 'Failed to upload image');
-    }
   };
 
-  const selectImage = (setImage, type) => {
-    launchImageLibrary({mediaType: 'photo'}, response => {
-      if (response.didCancel) {
-        console.log('User cancelled image picker');
-      } else if (response.error) {
-        console.log('ImagePicker Error: ', response.error);
-      } else {
-        const source = {uri: response.assets[0].uri};
-        setImage(source);
-        uploadImage(source, type);
-      }
-    });
+  const selectImageBanner = () => {
+    ImagePicker.openPicker({
+      width: 1600,
+      height: 900,
+      cropping: true,
+      mediaType: 'photo',
+      avoidEmptySpaceAroundImage: true,
+    })
+      .then(image => {
+        if (image.size / 1024 / 1024 > MAX_IMAGE_SIZE_MB) {
+          Alert.alert('Error', 'Image size exceeds 5 MB.');
+          return;
+        }
+        setNewBannerImage(image);
+        setBanner({uri: image.path});
+      })
+      .catch(error => {
+        console.error('Error selecting image:', error);
+      });
   };
-
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save</Text>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation]);
 
   return (
-    <SafeAreaView style={{flex: 1}}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.bannerContainer}>
-          <TouchableOpacity onPress={() => selectImage(setBanner, 'banner')}>
-            <ImageBackground
-              source={banner || require('../../assets/banner.png')}
-              style={styles.banner}
-              resizeMode="cover">
-              <View style={styles.overlay}>
-                <MaterialCommunityIcons name="camera" size={50} color="#fff" />
-              </View>
-            </ImageBackground>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.contentContainer}>
-          <TouchableOpacity
-            onPress={() => selectImage(setProfilePicture, 'profile')}>
-            <ImageBackground
-              source={profilePicture || require('../../assets/profile.png')}
-              style={styles.profilePicture}
-              imageStyle={styles.profilePictureImage}>
-              <View style={styles.overlay}>
-                <MaterialCommunityIcons name="camera" size={30} color="#fff" />
-              </View>
-            </ImageBackground>
-          </TouchableOpacity>
-          <View style={styles.usernameContainer}>
-            {isEditing ? (
-              <View style={styles.usernameInputContainer}>
-                <Text style={styles.usernameStatic}>@</Text>
-                <TextInput
-                  style={styles.usernameInput}
-                  value={username.replace('@', '')}
-                  onChangeText={text => {
-                    const newUsername =
-                      '@' + text.replace('@', '').slice(0, 15);
-                    setUsername(newUsername);
-                    setHasChanges(true); // Mark as changed
-                  }}
-                  onBlur={() => setIsEditing(false)}
-                  autoFocus
-                />
-              </View>
+    <AlertNotificationRoot>
+      <SafeAreaView style={{flex: 1}}>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.bannerContainer}>
+            {isBannerLoading ? (
+              <Skeleton containerStyle={[styles.banner, { height: 500 }]} animation="wave" />
             ) : (
-              <Text style={styles.username}>{username}</Text>
+              <TouchableOpacity onPress={selectImageBanner}>
+                <ImageBackground
+                  source={banner || require('../../assets/banner.png')}
+                  style={styles.banner}
+                  resizeMode="cover">
+                  <View style={styles.overlay}>
+                    <MaterialCommunityIcons
+                      name="camera"
+                      size={50}
+                      color="#fff"
+                    />
+                  </View>
+                </ImageBackground>
+              </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={() => setIsEditing(true)}>
-              <MaterialCommunityIcons name="pencil" size={20} color="#000" />
-            </TouchableOpacity>
           </View>
-          <TextInput
-            style={styles.input}
-            placeholder={userData?.name}
-            value={name}
-            onChangeText={text => {
-              setName(text);
-              setHasChanges(true); // Mark as changed
-            }}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder={userData?.bio || '-'}
-            value={bio}
-            onChangeText={text => {
-              setBio(text);
-              setHasChanges(true); // Mark as changed
-            }}
-            multiline
-          />
-          <TextInput style={styles.input} placeholder={userData?.email} />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+
+          <View style={styles.contentContainer}>
+            {isProfilePictureLoading ? (
+              <Skeleton containerStyle={[styles.profilePicture, { height: 150 }]} animation="wave" />
+            ) : (
+              <TouchableOpacity onPress={selectImageProfile}>
+                <ImageBackground
+                  source={
+                    profilePicture || require('../../assets/profilepic.png')
+                  }
+                  style={styles.profilePicture}
+                  imageStyle={styles.profileImage}
+                  resizeMode="cover">
+                  <View style={styles.profileOverlay}>
+                    <MaterialCommunityIcons
+                      name="camera"
+                      size={30}
+                      color="#fff"
+                    />
+                  </View>
+                </ImageBackground>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.usernameContainer}>
+              <View style={styles.usernameInputContainer}>
+                <Text style={styles.usernameStatic}> @</Text>
+                {isLoading ? (
+                  <Skeleton height={30} width={100} animation="wave" />
+                ) : isEditing ? (
+                  <TextInput
+                    style={styles.usernameInput}
+                    value={username}
+                    onChangeText={text => setUsername(text)}
+                    onBlur={() => setIsEditing(false)}
+                    autoFocus
+                  />
+                ) : (
+                  <Text style={styles.username}> {username} </Text>
+                )}
+              </View>
+              {!isLoading && (
+                <TouchableOpacity onPress={() => setIsEditing(true)}>
+                  <MaterialCommunityIcons
+                    name="pencil"
+                    size={17}
+                    color="#000"
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.inputContainer}>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                style={styles.textInput}
+                placeholder={userData?.name}
+                placeholderTextColor={
+                  colorScheme === 'dark' ? '#cccccc' : '#888888'
+                } // Adjust placeholder text color based on theme
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <TextInput
+                value={bio}
+                onChangeText={setBio}
+                style={styles.textInput}
+                placeholder={userData?.bio || 'Bio'}
+                placeholderTextColor={
+                  colorScheme === 'dark' ? '#cccccc' : '#888888'
+                } // Adjust placeholder text color based on theme
+                autoCapitalize="none"
+                multiline
+                maxLength={150}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.textInput}
+                placeholder={userData?.email}
+                placeholderTextColor={
+                  colorScheme === 'dark' ? '#cccccc' : '#888888'
+                } // Adjust placeholder text color based on theme
+                editable={false}
+              />
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </AlertNotificationRoot>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    alignItems: 'center',
-  },
-  bannerContainer: {
-    width: '100%',
-    height: 150,
-    marginBottom: 20,
-  },
-  banner: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  overlay: {
-    backgroundColor: 'rgba(128, 128, 128, 0.5)',
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  contentContainer: {
-    width: '100%',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  profilePicture: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 10,
-    overflow: 'hidden',
-  },
-  profilePictureImage: {
-    borderRadius: 50,
-  },
-  usernameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 25,
-  },
-  username: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginRight: 10,
-    marginLeft: 20,
-  },
-  usernameInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  usernameStatic: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 20,
-  },
-  usernameInput: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginRight: 10,
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
-  },
-  input: {
-    width: '100%',
-    padding: 10,
-    paddingLeft: 15,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  saveButton: {
-    backgroundColor: '#00137F',
-    paddingVertical: 7,
-    paddingHorizontal: 18,
-    borderRadius: 50,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-});
+const getStyles = colorScheme => {
+  const currentTextColor = colorScheme === 'dark' ? '#888888' : '#888888';
+  return StyleSheet.create({
+    scrollContainer: {
+      flexGrow: 1,
+      alignItems: 'center',
+      backgroundColor: '#fff',
+    },
+    bannerContainer: {
+      width: '100%',
+      height: 200,
+      marginBottom: 20,
+    },
+    banner: {
+      width: '100%',
+      height: '100%',
+    },
+    profilePicture: {
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      overflow: 'hidden',
+      marginBottom: 20,
+    },
+    profileImage: {
+      borderRadius: 60, // Ensures the image is circular
+    },
+    overlay: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    profileOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      borderRadius: 60, // Circular overlay
+    },
+    contentContainer: {
+      width: '100%',
+      paddingHorizontal: 20,
+      alignItems: 'center',
+    },
+    usernameContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 25,
+    },
+    usernameInputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    usernameStatic: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: currentTextColor,
+    },
+    usernameInput: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginLeft: 5,
+      borderBottomWidth: 1,
+      borderColor: '#ccc',
+      color: currentTextColor,
+    },
+    username: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginLeft: 5,
+      color: currentTextColor,
+    },
+    inputContainer: {
+      width: '100%',
+      marginBottom: 20,
+    },
+    label: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginBottom: 5,
+    },
+    textInput: {
+      borderWidth: 1,
+      borderColor: '#ccc',
+      borderRadius: 10,
+      padding: 10,
+      width: '100%',
+    },
+    saveButton: {
+      backgroundColor: '#00137F',
+      paddingVertical: 7,
+      paddingHorizontal: 18,
+      borderRadius: 50,
+    },
+    saveButtonText: {
+      color: '#fff',
+      fontWeight: 'bold',
+    },
+  });
+};

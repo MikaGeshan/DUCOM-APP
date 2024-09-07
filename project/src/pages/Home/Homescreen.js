@@ -7,11 +7,12 @@ import {
   SafeAreaView,
   BackHandler,
   TouchableOpacity,
-  Text,
+  RefreshControl,
+  ActivityIndicator,
+  Dimensions,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useFocusEffect} from '@react-navigation/native';
-import TweetCard from '../../components/TweetCard'; // Import TweetCard
+import TweetCard from '../../components/TweetCard';
 import Animated, {
   withDelay,
   interpolate,
@@ -19,75 +20,103 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import * as ImagePicker from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import config from '../../config';
+import { Skeleton } from 'react-native-elements'; // Pastikan Anda telah menginstal dan mengimpor Skeleton
 
 const serverUrl = config.SERVER_URL;
 
-const HomeScreen = ({navigation}) => {
-  const [tweets, setTweets] = useState([
-    {
-      id: '1',
-      userAvatar:
-        'https://i.pinimg.com/736x/75/5b/f4/755bf4ca4d44e85b43c7c569a8949cfb.jpg',
-      userName: 'peduliamatgua',
-      userHandle: 'frontendkedua',
-      content: 'This is an example tweet. React Native is awesome!',
-      likesCount: 15,
-      commentsCount: 3,
-      bookMarksCount: 5,
-    },
-    {
-      id: '2',
-      userAvatar:
-        'https://i.pinimg.com/474x/21/dc/e9/21dce97c3191b81ed92b56a9492ceac7.jpg',
-      userName: 'frontendgariskeras',
-      userHandle: 'frontend',
-      content: 'nyoride',
-      image:
-        'https://i.pinimg.com/474x/97/02/f6/9702f6e58679186bd95c4eb454899032.jpg', // Example image URL
-      likesCount: 30,
-      commentsCount: 10,
-      bookMarksCount: 8,
-    },
-    {
-      id: '3',
-      userAvatar: 'https://randomuser.me/api/portraits/men/3.jpg',
-      userName: 'Mike Johnson',
-      userHandle: 'mikejohnson',
-      content:
-        'Check out my latest blog post on web development trends in 2024!',
-      video:
-        'file:///C:/Users/ACER/Videos/Ready%20Or%20Not/Ready%20Or%20Not%202024.07.05%20-%2019.29.21.01.mp4', // Example video URL
-      likesCount: 50,
-      commentsCount: 20,
-      bookMarksCount: 10,
-    },
-  ]);
+const { width: screenWidth } = Dimensions.get('window');
 
+const HomeScreen = ({navigation}) => {
+  const [tweets, setTweets] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true); // State untuk mengontrol tampilan skeleton
   const isExpanded = useSharedValue(false);
 
-  async function getData() {
+  const fetchTweets = async pageNum => {
+    setLoading(true);
     const token = await AsyncStorage.getItem('token');
     try {
       const response = await axios.post(`${serverUrl}/userdata`, {token});
       const {data, status} = response.data;
-      console.log('Data received:', data); // Add this log to check the data
       if (status === 'error') {
         Alert.alert('Error', 'Anda Telah Keluar dari Akun', [
           {text: 'OK', onPress: () => navigation.navigate('Auths')},
         ]);
-        return;
+        return [];
       }
-      // Fetch Data Tweet
-      setTweets([...data, ...tweets]); // Combine fetched tweets with example tweets
+      const emailUser = data.email
+      const idUser = data._id; 
+      const profilePicture = data.profilePicture
+
+      const responseTweet = await axios.post(`${serverUrl}/posts`, {
+        page: pageNum,
+      });
+      const dataTweet = responseTweet.data;
+
+      const formattedTweets = dataTweet.data.map(post => ({
+        id: post._id,
+        userAvatar: post.user.profilePicture,
+        userName: post.user.name,
+        userHandle: post.user.username,
+        postDate: post.created_at,
+        content: post.description,
+        media: Array.isArray(post.media)
+          ? post.media.map(mediaItem => ({
+              type: mediaItem.type,
+              uri: mediaItem.uri,
+            }))
+          : [],
+        likesCount: post.likes.length,
+        commentsCount: post.comments.length,
+        bookMarksCount: post.bookmarks.length,
+        isLiked: post.likes.some(like => like._id === idUser),
+        isBookmarked: post.bookmarks.some(bookmark => bookmark.user === idUser),
+        userIdPost: post.user._id,
+        idUser: idUser,
+        allowedEmail: post.allowedEmail,
+        userEmailPost: post.user.email,
+        emailUser : emailUser,
+        profilePicture: profilePicture
+      }));
+
+      return formattedTweets;
     } catch (error) {
       console.error('Error fetching data:', error);
+      return [];d
+    } finally {
+      setLoading(false);
     }
-  }
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setShowSkeleton(true); // Tampilkan skeleton saat refresh
+    setPage(1);
+    setHasMore(true); // Reset hasMore to true
+    const newTweets = await fetchTweets(1);
+    setTweets(newTweets.slice(0, 4)); // Only display 4 tweets
+    setRefreshing(false);
+    setShowSkeleton(false); // Sembunyikan skeleton setelah refresh selesai
+  }, []);
+
+  const LoadingIndicator = () => {
+    return (
+      <View style={styles.loadingIndicator}>
+        <ActivityIndicator size="large" color="#000" />
+      </View>
+    );
+  };
 
   const handleBackPress = () => {
     Alert.alert('Exit App', 'Are you sure want to exit', [
@@ -115,9 +144,37 @@ const HomeScreen = ({navigation}) => {
 
   useFocusEffect(
     useCallback(() => {
-      getData();
+      isExpanded.value = false; 
     }, []),
   );
+
+  useEffect(() => {
+    const loadInitialTweets = async () => {
+      const initialTweets = await fetchTweets(1);
+      setTweets(initialTweets.slice(0, 5)); // Load only 4 tweets initially
+      setLoading(false);
+      setShowSkeleton(false); // Sembunyikan skeleton setelah data awal di-load
+    };
+    loadInitialTweets();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const checkLoginStatus = async () => {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+          navigation.navigate('Auths'); // Redirect to Auths if not logged in
+        }
+      };
+      checkLoginStatus();
+    }, [])
+  );
+
+  const onPostSuccess = () => {
+    console.log('Post created successfully, refreshing HomeScreen...');
+    setRefreshing(true);
+    onRefresh();
+  };
 
   const handleOpenCamera = () => {
     const options = {
@@ -128,16 +185,13 @@ const HomeScreen = ({navigation}) => {
     ImagePicker.launchCamera(options, response => {
       if (response.didCancel) {
         console.log('User cancelled photo');
-        // Reset isExpanded value to ensure FAB does not disappear
         isExpanded.value = false;
       } else if (response.error) {
         console.log('ImagePicker Error: ', response.error);
       } else {
         const uri = response.assets[0].uri;
-        setCapturedImageUri(uri);
         console.log('Captured image URI:', uri);
-        // Navigate to CreatePost and pass the image URI
-        navigation.navigate('CreatePost', {imageUri: uri});
+        navigation.navigate('CreatePost', {mediaUri: uri, mediaType: 'photo'});
       }
     });
   };
@@ -163,6 +217,13 @@ const HomeScreen = ({navigation}) => {
         color: isExpanded.value ? '#000' : '#000',
       };
     });
+
+    useEffect(() => {
+      return () => {
+        cancelAnimation(animatedStyles);
+        cancelAnimation(iconStyle);
+      };
+    }, [animatedStyles, iconStyle]);
 
     return (
       <AnimatedPressable
@@ -190,18 +251,101 @@ const HomeScreen = ({navigation}) => {
     };
   });
 
+  const handleLoadMore = async () => {
+    if (!loadingMore && hasMore) {
+      setLoadingMore(true);
+      const moreTweets = await fetchTweets(page + 1); // Load next page of tweets
+      const newTweets = moreTweets.filter(
+        tweet => !tweets.some(existingTweet => existingTweet.id === tweet.id),
+      );
+      if (newTweets.length > 0) {
+        setTweets(prevTweets => [...prevTweets, ...newTweets.slice(0, 5)]); // Add only 4 new tweets
+        setPage(prevPage => prevPage + 1); // Increment page number
+      }
+      setLoadingMore(false);
+      if (newTweets.length < 4) { // Check if less than 4 tweets are returned
+        setHasMore(false);
+      }
+    }
+  };
+
+  const renderSkeleton = () => (
+    <>
+      {[...Array(5)].map((_, index) => (
+        <View key={index} style={styles.skeletonContainer}>
+          <View style={styles.skeletonHeader}>
+            <Skeleton
+              animation="pulse"
+              circle
+              height={40}
+              width={40}
+              style={styles.skeletonAvatar}
+            />
+            <View style={styles.skeletonTextContainer}>
+              <Skeleton
+                animation="pulse"
+                height={20}
+                width="25%" // 25% of the screen width
+                style={styles.skeleton}
+              />
+              <Skeleton
+                animation="pulse"
+                height={14}
+                width="15%" // 15% of the screen width
+                style={styles.skeleton}
+              />
+            </View>
+          </View>
+          <Skeleton
+            animation="pulse"
+            height={20}
+            width="75%" // 75% of the screen width
+            style={[styles.skeleton, { borderRadius: 3 }]}
+          />
+          <Skeleton
+            animation="pulse"
+            height={200}
+            width="100%" // 100% of the screen width
+            style={[styles.skeleton, { borderRadius: 7 }]}
+          />
+        </View>
+      ))}
+    </>
+  );
+
+  const onDeleteSuccess = () => {
+    console.log('Post deleted successfully, refreshing HomeScreen...');
+    setRefreshing(true);
+    onRefresh();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {Array.isArray(tweets) && tweets.length > 0 ? (
+      <ScrollView
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        onScroll={({nativeEvent}) => {
+          const {contentOffset, layoutMeasurement, contentSize} = nativeEvent;
+          const contentHeight = contentSize.height;
+          const viewportHeight = layoutMeasurement.height;
+          const scrollPosition = contentOffset.y + viewportHeight;
+
+          if (scrollPosition >= contentHeight - 100) {
+            handleLoadMore();
+          }
+        }}>
+        {showSkeleton ? (
+          renderSkeleton()
+        ) : (
           tweets.map((tweet, index) => (
             <View key={index} style={styles.tweetContainer}>
-              <TweetCard tweet={tweet} />
+              <TweetCard tweet={tweet} onDeleteSuccess={onDeleteSuccess} />
             </View>
           ))
-        ) : (
-          <Text style={styles.noTweetsText}>No tweets available</Text>
         )}
+        {loadingMore && <LoadingIndicator />}
       </ScrollView>
 
       <View style={styles.fabContainer}>
@@ -216,13 +360,13 @@ const HomeScreen = ({navigation}) => {
           isExpanded={isExpanded}
           index={1}
           iconName={'camera-outline'}
-          onPress={handleOpenCamera} // Added onPress handler to open camera
+          onPress={handleOpenCamera} 
         />
         <FloatingActionButton
           isExpanded={isExpanded}
           index={2}
           iconName={'feather'}
-          onPress={() => navigation.navigate('CreatePost')} // Navigate to CreatePost screen
+          onPress={() => navigation.navigate('CreatePost', {onPostSuccess})}
         />
       </View>
     </SafeAreaView>
@@ -251,8 +395,10 @@ const mainButtonStyles = StyleSheet.create({
     alignItems: 'center',
   },
   content: {
-    fontSize: 48,
-    color: '#f8f9ff',
+    fontSize: 45,
+    color: 'white',
+    lineHeight: 60,
+    marginBottom: 1,
   },
 });
 
@@ -264,12 +410,39 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingBottom: 20,
+    paddingBottom: 10,
   },
   tweetContainer: {
     width: '100%',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
+  },
+  skeletonScreen: {   
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skeletonContainer: {
+    padding: 20,
+    alignItems: 'flex-start', // Align items to the left
+    width: '100%', // Ensure the container takes full width
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    width: '100%', // Ensure the header takes full width
+  },
+  skeletonAvatar: {
+    marginRight: 10,
+  },
+  skeletonTextContainer: {
+    flex: 1,
+  },
+  skeleton: {
+    marginBottom: 10,
+  },
+  loadingIndicator: {
+    alignItems: 'center',
+    marginVertical: 20,
   },
   fabContainer: {
     position: 'absolute',
@@ -304,11 +477,8 @@ const styles = StyleSheet.create({
     color: '#888',
     marginTop: 20,
   },
-  capturedImage: {
-    width: '100%',
-    height: 200,
-    marginTop: 20,
-    borderRadius: 10,
+  loadingMore: {
+    marginVertical: 20,
   },
 });
 

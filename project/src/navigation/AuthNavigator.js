@@ -10,11 +10,15 @@ import {
   TermsandConditionscreen,
   Profilescreen,
   EditProfilePage,
-  CreatePost, 
+  CreatePost,
+  CommentScreen,
+  Userprofile, // Tambahkan import Userprofile
 } from '../pages';
-import {NavigationContainer, useTheme} from '@react-navigation/native';
+import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import BottomTabNavigator from './BottomTabNavigator';
+import DrawerNavigator from './DrawerNavigator'; // Tambahkan import DrawerNavigator
+import UserTopTabNavigator from './UserTopTabNavigator';
 
 const Stack = createNativeStackNavigator();
 
@@ -73,6 +77,11 @@ export default function MainNavigation() {
           options={{headerShown: true, title: 'Create Post'}}
         />
         <Stack.Screen
+          name="Comment"
+          component={CommentScreen}
+          options={{headerShown: true, title: 'Comments'}}
+        />
+        <Stack.Screen
           name="Profile"
           component={Profilescreen}
           options={{headerShown: false}}
@@ -81,6 +90,17 @@ export default function MainNavigation() {
           name="EditProfile"
           component={EditProfilePage}
           options={{headerShown: true, title: 'Edit Profile'}}
+        />
+        <Stack.Screen
+          name="Userprofile"
+          component={UserTopTabNavigator} // Pastikan UserTopTabNavigator diatur sebagai layar langsung
+          options={{headerShown: true, title: 'User Profile'}}
+          initialParams={{userIdPost: '', username: ''}} // Tambahkan initialParams untuk userIdPost dan username
+        />
+        <Stack.Screen
+          name="DrawerNavigator"
+          component={DrawerNavigator} 
+          options={{headerShown: false}}
         />
       </Stack.Navigator>
     </NavigationContainer>
